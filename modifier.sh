@@ -41,7 +41,6 @@ sed -ri "s/\b_([a-zA-Z])/\1/g" kernel/sched.c
 sed -ri "s/\b_([a-zA-Z])/\1/g" kernel/fork.c
 sed -ri "s/\b_([a-zA-Z])/\1/g" kernel/chr_drv/serial.c
 sed -ri "s/\b_([a-zA-Z])/\1/g" kernel/chr_drv/rs_io.s
-sed -ri "s/\b_([a-zA-Z])/\1/g" kernel/chr_drv/keyboard.s
 sed -ri "s/\b_([a-zA-Z])/\1/g" kernel/chr_drv/keyboard.S
 sed -i -e '277s/#define get_base/#define get_base_asm/g' -e '262s/#define set_base/#define set_base_asm/g' include/linux/sched.h
 sed -i -e '263s/#define set_limit/#define set_limit_asm/g' include/linux/sched.h
