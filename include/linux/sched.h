@@ -1,5 +1,5 @@
-#ifndef _SCHED_H
-#define _SCHED_H
+#ifndef SCHED_H
+#define SCHED_H
 
 #define HZ 100
 
@@ -177,7 +177,7 @@ struct task_struct {
 /*tss*/	{0,PAGE_SIZE+(long)&init_task,0x10,0,0,0,0,(long)&pg_dir,\
 	 0,0,0,0,0,0,0,0, \
 	 0,0,0x17,0x17,0x17,0x17,0x17,0x17, \
-	 _LDT(0),0x80000000, \
+	 LDT(0),0x80000000, \
 		{} \
 	}, \
 }
@@ -203,10 +203,10 @@ extern int in_group_p(gid_t grp);
  */
 #define FIRST_TSS_ENTRY 4
 #define FIRST_LDT_ENTRY (FIRST_TSS_ENTRY+1)
-#define _TSS(n) ((((unsigned long) n)<<4)+(FIRST_TSS_ENTRY<<3))
-#define _LDT(n) ((((unsigned long) n)<<4)+(FIRST_LDT_ENTRY<<3))
-#define ltr(n) __asm__("ltr %%ax"::"a" (_TSS(n)))
-#define lldt(n) __asm__("lldt %%ax"::"a" (_LDT(n)))
+#define TSS(n) ((((unsigned long) n)<<4)+(FIRST_TSS_ENTRY<<3))
+#define LDT(n) ((((unsigned long) n)<<4)+(FIRST_LDT_ENTRY<<3))
+#define ltr(n) __asm__("ltr %%ax"::"a" (TSS(n)))
+#define lldt(n) __asm__("lldt %%ax"::"a" (LDT(n)))
 #define str(n) \
 __asm__("str %%ax\n\t" \
 	"subl %2,%%eax\n\t" \
@@ -221,22 +221,22 @@ __asm__("str %%ax\n\t" \
  */
 #define switch_to(n) {\
 struct {long a,b;} __tmp; \
-__asm__("cmpl %%ecx,_current\n\t" \
+__asm__("cmpl %%ecx,current\n\t" \
 	"je 1f\n\t" \
 	"movw %%dx,%1\n\t" \
-	"xchgl %%ecx,_current\n\t" \
+	"xchgl %%ecx,current\n\t" \
 	"ljmp %0\n\t" \
-	"cmpl %%ecx,_last_task_used_math\n\t" \
+	"cmpl %%ecx,last_task_used_math\n\t" \
 	"jne 1f\n\t" \
 	"clts\n" \
 	"1:" \
 	::"m" (*&__tmp.a),"m" (*&__tmp.b), \
-	"d" (_TSS(n)),"c" ((long) task[n])); \
+	"d" (TSS(n)),"c" ((long) task[n])); \
 }
 
 #define PAGE_ALIGN(n) (((n)+0xfff)&0xfffff000)
 
-#define _set_base(addr,base) \
+#define set_base(addr,base) \
 __asm__("movw %%dx,%0\n\t" \
 	"rorl $16,%%edx\n\t" \
 	"movb %%dl,%1\n\t" \
@@ -245,9 +245,9 @@ __asm__("movw %%dx,%0\n\t" \
 	  "m" (*((addr)+4)), \
 	  "m" (*((addr)+7)), \
 	  "d" (base) \
-	:"dx")
+	:) 
 
-#define _set_limit(addr,limit) \
+#define set_limit(addr,limit) \
 __asm__("movw %%dx,%0\n\t" \
 	"rorl $16,%%edx\n\t" \
 	"movb %1,%%dh\n\t" \
@@ -257,12 +257,12 @@ __asm__("movw %%dx,%0\n\t" \
 	::"m" (*(addr)), \
 	  "m" (*((addr)+6)), \
 	  "d" (limit) \
-	:"dx")
+	:) 
 
-#define set_base(ldt,base) _set_base( ((char *)&(ldt)) , base )
-#define set_limit(ldt,limit) _set_limit( ((char *)&(ldt)) , (limit-1)>>12 )
+#define set_base_asm(ldt,base) set_base( ((char *)&(ldt)) , base )
+#define set_limit_asm(ldt,limit) set_limit( ((char *)&(ldt)) , (limit-1)>>12 )
 
-#define _get_base(addr) ({\
+#define get_base(addr) ({\
 unsigned long __base; \
 __asm__("movb %3,%%dh\n\t" \
 	"movb %2,%%dl\n\t" \
@@ -274,7 +274,7 @@ __asm__("movb %3,%%dh\n\t" \
 	 "m" (*((addr)+7))); \
 __base;})
 
-#define get_base(ldt) _get_base( ((char *)&(ldt)) )
+#define get_base_asm(ldt) get_base( ((char *)&(ldt)) )
 
 #define get_limit(segment) ({ \
 unsigned long __limit; \

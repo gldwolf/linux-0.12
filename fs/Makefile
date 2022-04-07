@@ -1,9 +1,9 @@
-AR	=gar
-AS	=gas
+AR	=ar
+AS	=as --32
 CC	=gcc
-LD	=gld
-CFLAGS	=-Wall -O -fstrength-reduce -fcombine-regs -fomit-frame-pointer \
-	-fno-defer-pop -mstring-insns -nostdinc -I../include
+LD	=ld -m elf_i386 -e startup_32 -Ttext 0
+CFLAGS	=-m32 -w -fstrength-reduce -fomit-frame-pointer \
+	-fno-defer-pop  -nostdinc -I../include
 CPP	=gcc -E -nostdinc -I../include
 
 .c.s:

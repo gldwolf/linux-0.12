@@ -48,7 +48,7 @@ void rs_init(void)
  * the write_queue. It must check wheter the queue is empty, and
  * set the interrupt register accordingly
  *
- *	void _rs_write(struct tty_struct * tty);
+ *	void rs_write(struct tty_struct * tty);
  */
 void rs_write(struct tty_struct * tty)
 {

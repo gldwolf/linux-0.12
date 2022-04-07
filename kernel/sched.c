@@ -20,8 +20,8 @@
 
 #include <signal.h>
 
-#define _S(nr) (1<<((nr)-1))
-#define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
+#define S(nr) (1<<((nr)-1))
+#define BLOCKABLE (~(S(SIGKILL) | S(SIGSTOP)))
 
 void show_task(int nr,struct task_struct * p)
 {
@@ -134,7 +134,7 @@ void schedule(void)
 				(*p)->signal |= (1<<(SIGALRM-1));
 				(*p)->alarm = 0;
 			}
-			if (((*p)->signal & ~(_BLOCKABLE & (*p)->blocked)) &&
+			if (((*p)->signal & ~(BLOCKABLE & (*p)->blocked)) &&
 			(*p)->state==TASK_INTERRUPTIBLE)
 				(*p)->state=TASK_RUNNING;
 		}

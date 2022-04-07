@@ -264,8 +264,8 @@ volatile void do_exit(long code)
 	struct task_struct *p;
 	int i;
 
-	free_page_tables(get_base(current->ldt[1]),get_limit(0x0f));
-	free_page_tables(get_base(current->ldt[2]),get_limit(0x17));
+	free_page_tables(get_base_asm(current->ldt[1]),get_limit(0x0f));
+	free_page_tables(get_base_asm(current->ldt[2]),get_limit(0x17));
 	for (i=0 ; i<NR_OPEN ; i++)
 		if (current->filp[i])
 			sys_close(i);

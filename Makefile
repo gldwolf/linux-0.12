@@ -7,12 +7,12 @@ RAMDISK = #-DRAMDISK=512
 AS86	=as86 -0 -a
 LD86	=ld86 -0
 
-AS	=gas
-LD	=gld
+AS	=as --32
+LD	=ld -m elf_i386 -e startup_32 -Ttext 0
 LDFLAGS	=-s -x -M
 CC	=gcc $(RAMDISK)
-CFLAGS	=-Wall -O -fstrength-reduce -fomit-frame-pointer \
--fcombine-regs -mstring-insns
+CFLAGS	=-m32 -w -fstrength-reduce -fomit-frame-pointer \
+
 CPP	=cpp -nostdinc -Iinclude
 
 #
@@ -20,8 +20,8 @@ CPP	=cpp -nostdinc -Iinclude
 # This can be either FLOPPY, /dev/xxxx or empty, in which case the
 # default of /dev/hd6 is used by 'build'.
 #
-ROOT_DEV=/dev/hd6
-SWAP_DEV=/dev/hd2
+ROOT_DEV=FLOPPY
+SWAP_DEV=
 
 ARCHIVES=kernel/kernel.o mm/mm.o fs/fs.o
 DRIVERS =kernel/blk_drv/blk_drv.a kernel/chr_drv/chr_drv.a

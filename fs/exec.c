@@ -54,7 +54,7 @@ int sys_uselib(const char * library)
 /* we should check filetypes (headers etc), but we don't */
 	iput(current->library);
 	current->library = NULL;
-	base = get_base(current->ldt[2]);
+	base = get_base_asm(current->ldt[2]);
 	base += LIBRARY_OFFSET;
 	free_page_tables(base,LIBRARY_SIZE);
 	current->library = inode;
@@ -158,10 +158,12 @@ static unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 				offset = p % PAGE_SIZE;
 				if (from_kmem==2)
 					set_fs(old_fs);
-				if (!(pag = (char *) page[p/PAGE_SIZE]) &&
-				    !(pag = (char *) page[p/PAGE_SIZE] =
+				if ((!page[p/PAGE_SIZE]) &&
+				    !(page[p/PAGE_SIZE] =
 				      (unsigned long *) get_free_page())) 
 					return 0;
+                else
+                    pag = (char *) page[p/PAGE_SIZE];
 				if (from_kmem==2)
 					set_fs(new_fs);
 
@@ -181,12 +183,12 @@ static unsigned long change_ldt(unsigned long text_size,unsigned long * page)
 
 	code_limit = TASK_SIZE;
 	data_limit = TASK_SIZE;
-	code_base = get_base(current->ldt[1]);
+	code_base = get_base_asm(current->ldt[1]);
 	data_base = code_base;
-	set_base(current->ldt[1],code_base);
-	set_limit(current->ldt[1],code_limit);
-	set_base(current->ldt[2],data_base);
-	set_limit(current->ldt[2],data_limit);
+	set_base_asm(current->ldt[1],code_base);
+	set_limit_asm(current->ldt[1],code_limit);
+	set_base_asm(current->ldt[2],data_base);
+	set_limit_asm(current->ldt[2],data_limit);
 /* make sure fs points to the NEW data segment */
 	__asm__("pushl $0x17\n\tpop %%fs"::);
 	data_base += data_limit - LIBRARY_SIZE;
@@ -356,8 +358,8 @@ restart_interp:
 		if ((current->close_on_exec>>i)&1)
 			sys_close(i);
 	current->close_on_exec = 0;
-	free_page_tables(get_base(current->ldt[1]),get_limit(0x0f));
-	free_page_tables(get_base(current->ldt[2]),get_limit(0x17));
+	free_page_tables(get_base_asm(current->ldt[1]),get_limit(0x0f));
+	free_page_tables(get_base_asm(current->ldt[2]),get_limit(0x17));
 	if (last_task_used_math == current)
 		last_task_used_math = NULL;
 	current->used_math = 0;

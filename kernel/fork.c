@@ -28,7 +28,7 @@ void verify_area(void * addr,int size)
 	start = (unsigned long) addr;
 	size += start & 0xfff;
 	start &= 0xfffff000;
-	start += get_base(current->ldt[2]);
+	start += get_base_asm(current->ldt[2]);
 	while (size>0) {
 		size -= 4096;
 		write_verify(start);
@@ -43,16 +43,16 @@ int copy_mem(int nr,struct task_struct * p)
 
 	code_limit=get_limit(0x0f);
 	data_limit=get_limit(0x17);
-	old_code_base = get_base(current->ldt[1]);
-	old_data_base = get_base(current->ldt[2]);
+	old_code_base = get_base_asm(current->ldt[1]);
+	old_data_base = get_base_asm(current->ldt[2]);
 	if (old_data_base != old_code_base)
 		panic("We don't support separate I&D");
 	if (data_limit < code_limit)
 		panic("Bad data_limit");
 	new_data_base = new_code_base = nr * TASK_SIZE;
 	p->start_code = new_code_base;
-	set_base(p->ldt[1],new_code_base);
-	set_base(p->ldt[2],new_data_base);
+	set_base_asm(p->ldt[1],new_code_base);
+	set_base_asm(p->ldt[2],new_data_base);
 	if (copy_page_tables(old_data_base,new_data_base,data_limit)) {
 		free_page_tables(new_data_base,data_limit);
 		return -ENOMEM;
@@ -107,7 +107,7 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 	p->tss.ds = ds & 0xffff;
 	p->tss.fs = fs & 0xffff;
 	p->tss.gs = gs & 0xffff;
-	p->tss.ldt = _LDT(nr);
+	p->tss.ldt = LDT(nr);
 	p->tss.trace_bitmap = 0x80000000;
 	if (last_task_used_math == current)
 		__asm__("clts ; fnsave %0 ; frstor %0"::"m" (p->tss.i387));
