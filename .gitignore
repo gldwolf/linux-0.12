@@ -50,3 +50,7 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# bochs dir and .img add by myself(自己添加的 bochs、img 等)
+bochs/
+*.img
