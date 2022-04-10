@@ -54,3 +54,12 @@ dkms.conf
 # bochs dir and .img add by myself(自己添加的 bochs、img 等)
 bochs/
 *.img
+# 编译后的部分文件
+boot/bootsect
+boot/bootsect.s
+boot/setup
+boot/setup.s
+kernel/chr_drv/keyboard.s
+tools/build
+tools/system
+Image
