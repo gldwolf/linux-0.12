@@ -1,9 +1,17 @@
+! bootsect.S 编译后的代码将保存在引导设备的第一个扇区(一个扇区 512 Byte)，
+! 将会由 BIOS 读入到内存绝对地址 0x7C00(31KB) 处。
+! 该部分代码会把自己由地址 0x7C00 移动到内存绝对地址 0x90000(576KB) 处，
+! 并使用 BIOS 中断把启动设备盘中后 2KB 字节(1-4 共四个扇区)代码(boot/setup.S)读入到内存 0x90200(576KB+512B=576.5KB) 处，即 bootsect.S 后面。
+! 而内核的其它部分(system 模块)则被读入到内存地址 0x10000(64KB) 处。
+!
+! 由于文件名后缀为 .S(大写)，可以使用 GNU C 编译器的预处理功能，可以使用 "#include" "#if" 等语句
+! 这里主要是为了使用 include/linux/config.h 中定义的常量
+#include <linux/config.h>
 !
 ! SYS_SIZE is the number of clicks (16 bytes) to be loaded.
 ! 0x3000 is 0x30000 bytes = 196kB, more than enough for current
-! versions of linux
-!
-#include <linux/config.h>
+! versions of linux (0x3000*16=0x30000)
+! 要加载的 system 模块的长度，单位：节(1节=16字节)，所以 0x3000*16=0x30000=192kb
 SYSSIZE = DEF_SYSSIZE
 !
 !	bootsect.s		(C) 1991 Linus Torvalds
@@ -24,40 +32,51 @@ SYSSIZE = DEF_SYSSIZE
 ! read errors will result in a unbreakable loop. Reboot by hand. It
 ! loads pretty fast by getting whole sectors at a time whenever possible.
 
+! .global 或 .globl 表示其后的标识符是外部的或全局的
 .globl begtext, begdata, begbss, endtext, enddata, endbss
-.text
+.text       ! .text 表示代码段
 begtext:
-.data
+.data       ! .data 表示数据段
 begdata:
-.bss
+.bss        ! .bss 表示未初始化数据段
 begbss:
 .text
 
-SETUPLEN = 4				! nr of setup-sectors
+! setup 程序所占扇区数
+SETUPLEN = 4				! nr of setup-sectors 
+! 引导程序 bootsect 由 BIOS 加载到的内存地址
 BOOTSEG  = 0x07c0			! original address of boot-sector
+! 将 bootsect 程序移动到此处(0x90000: 576KB) - 避开 system 模块
 INITSEG  = DEF_INITSEG			! we move boot here - out of the way
+! 将 setup 程序加载到此处(0x90200: 576.5KB) - bootsect 后面
 SETUPSEG = DEF_SETUPSEG			! setup starts here
+! 将 system 模块先加载到此处(0x10000: 64KB)，后面会移动到 0x0 处
 SYSSEG   = DEF_SYSSEG			! system loaded at 0x10000 (65536).
+! system 模块结束地址
 ENDSEG   = SYSSEG + SYSSIZE		! where to stop loading
 
 ! ROOT_DEV & SWAP_DEV are now written by "build".
-ROOT_DEV = 0
-SWAP_DEV = 0
+! 根文件系统设备号 ROOT_DEV 和交换设备号 SWAP_DEV 现在由 tools 目录下的 build 程序写入。
+ROOT_DEV = 0        ! 根文件系统设备使用与系统引导时同样的设备
+SWAP_DEV = 0        ! 交换设备也使用与系统导引时同样的设备
 
-entry start
+entry start         ! 程序开始点
 start:
-	mov	ax,#BOOTSEG
-	mov	ds,ax
+	mov	ax,#BOOTSEG     ! 从 ds:[si] 移动到 es:[di]
+	mov	ds,ax           ! 即从 0x07c0:0x0000 -> 0x9000:0x0000 处
 	mov	ax,#INITSEG
 	mov	es,ax
-	mov	cx,#256
+	mov	cx,#256         ! 共移动 256 字，即 512 Bytes
 	sub	si,si
 	sub	di,di
-	rep
+	rep                 ! 重复执行并递减 cx 的值，直至 cx = 0 为止
 	movw
-	jmpi	go,INITSEG
+    ! 跳转到新的地址(0x90000:[go])上去执行
+	jmpi	go,INITSEG  ! 以上代码是将 bootsect 程序从 0x07c0 移动到 0x90000
 
+! 此时代码就已经跳到 0x90000:[go](段内偏移)
 go:	mov	ax,cs		
+    ! 设置一个任意远大于 512() 的值
 	mov	dx,#0xfef4	! arbitrary value >>512 - disk parm size
 
 	mov	ds,ax

@@ -63,3 +63,5 @@ kernel/chr_drv/keyboard.s
 tools/build
 tools/system
 Image
+tags
+**/*.swp
