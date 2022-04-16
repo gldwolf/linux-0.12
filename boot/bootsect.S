@@ -62,7 +62,7 @@ SWAP_DEV = 0        ! 交换设备也使用与系统导引时同样的设备
 
 entry start         ! 程序开始点
 start:
-	mov	ax,#BOOTSEG     ! 从 ds:[si] 移动到 es:[di]
+	mov	ax,#BOOTSEG     ! 将 bootsect.S 代码本身从 ds:[si] 移动到 es:[di]
 	mov	ds,ax           ! 即从 0x07c0:0x0000 -> 0x9000:0x0000 处
 	mov	ax,#INITSEG
 	mov	es,ax
@@ -71,20 +71,22 @@ start:
 	sub	di,di
 	rep                 ! 重复执行并递减 cx 的值，直至 cx = 0 为止
 	movw
-    ! 跳转到新的地址(0x90000:[go])上去执行
+    ! 跳转到新的地址(0x9000:[go])上去执行
 	jmpi	go,INITSEG  ! 以上代码是将 bootsect 程序从 0x07c0 移动到 0x90000
 
-! 此时代码就已经跳到 0x90000:[go](段内偏移)
-go:	mov	ax,cs		
+! 此时代码就已经跳到 0x9000:[go](段内偏移)
+go:	mov	ax,cs	        ! 此时 cs = 0x9000(0)
     ! 设置一个任意远大于 512() 的值
-	mov	dx,#0xfef4	! arbitrary value >>512 - disk parm size
+	mov	dx,#0xfef4	    ! arbitrary value >>512 - disk parm size
 
 	mov	ds,ax
 	mov	es,ax
-	push	ax
+    ! 临时保存栈段地址 0x9000，在后面会用到
+	push	ax      ! 在此时 ss = 0x00, sp = 0xfffe，即栈指针指向 0x0fffe 处
 
+    ! 设置栈寄存器 ss 和 sp 指向远大于 0x90200 处即可，因为还会将 bootsect.S 后面的 4 个扇区的 setup.s 代码复制到 0x90200 处
 	mov	ss,ax		! put stack at 0x9ff00 - 12.
-	mov	sp,dx
+	mov	sp,dx       ! 将栈指针指向 0x9fef4(0x9000:0xfef4) 处
 !/*
 ! *	Many BIOS's default disk parameter tables will not 
 ! *	recognize multi-sector reads beyond the maximum sector number
@@ -102,23 +104,29 @@ go:	mov	ax,cs
 ! *		fs = 0, gs = parameter table segment
 ! */
 
+! 段寄存器现在状态是: 
+! ds=es=ss=cs=0x9000(INITSEG), fs=0x0, gs=参数表所在段的值
 
+    ! 设置 fs:bx=0x0:0x78=0x78 指向存有软驱参数表的内存地址
 	push	#0
 	pop	fs
 	mov	bx,#0x78		! fs:bx is parameter table address
-	seg fs
+
+    ! 将 gs:si 作为源地址，es:di 作为目的地址，拷贝 12 字节数据()
+	seg fs              ! 指令 seg 表示下一条语句的操作数在 fs 段中
+    ! 此处表示将 fs:bx 指向的内存地址中的数据(
+    ! 软驱参数表所在的内存地址，由 BIOS 设置的)作为 gs:si 的值
 	lgs	si,(bx)			! gs:si is source
-
-	mov	di,dx			! es:di is destination
+	mov	di,dx			! es:di is destination(0x9000:0xfef4)
 	mov	cx,#6			! copy 12 bytes
-	cld
+	cld                 ! 清除方向标志(clear direction)，复制时指针递增
 
-	rep
+	rep                 ! 复制 12 bytes 的软驱参数表内容到 0x9000:0xfef4 处
 	seg gs
 	movw
 
-	mov	di,dx
-	movb	4(di),*18		! patch sector count
+	mov	di,dx           ! es:di 指向新的软驱参数表
+	movb	4(di),*18	! patch sector count，修改偏移 4 字节(0x9000:0xfef8)处的最大扇区数
 
 	seg fs
 	mov	(bx),di
