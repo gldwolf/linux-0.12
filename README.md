@@ -1,5 +1,8 @@
 # linux-0.12 内核源码
 
+## 写在前面
+非常感谢 Linus 先生的伟大著作，鄙人不才，虽暂时未能完全领略 Linux 之美，但以目前的粗鄙之见仍能深受启发，是我系统入门之路的圣经，在此拜谢！
+
 > For learning linux-0.12 source code（用于学习 linux-0.12 源码，中文注释）
 
 ## Purpose: 
