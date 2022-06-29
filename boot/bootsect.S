@@ -66,7 +66,7 @@ start:
 	mov	ds,ax           ! 即从 0x07c0:0x0000 -> 0x9000:0x0000 处
 	mov	ax,#INITSEG
 	mov	es,ax
-	mov	cx,#256         ! 共移动 256 字，即 512 Bytes
+	mov	cx,#256         ! 共移动 256 字，即 512 Bytes(即bootsect代码占1个扇区)
 	sub	si,si
 	sub	di,di
 	rep                 ! 重复执行并递减 cx 的值，直至 cx = 0 为止
@@ -105,7 +105,11 @@ go:	mov	ax,cs	        ! 此时 cs = 0x9000(0)
 ! */
 
 ! 段寄存器现在状态是: 
-! ds=es=ss=cs=0x9000(INITSEG), fs=0x0, gs=参数表所在段的值
+! ds=es=ss=cs=0x9000(INITSEG), fs=0x0, gs=软驱参数表所在段的值
+
+! BIOS 设置的中断 0x1E 指向的是软驱参数表(0x1E*4=0x78处)，
+!下面代码是先软驱参数表由 0x0000:0x0078 移动到 0x9000:0xfef4 处，
+! 然后修改新的参数表中的每磁道最大扇区数(偏移 4 个字节处)为 18
 
     ! 设置 fs:bx=0x0:0x78=0x78 指向存有软驱参数表的内存地址
 	push	#0
@@ -113,7 +117,7 @@ go:	mov	ax,cs	        ! 此时 cs = 0x9000(0)
 	mov	bx,#0x78		! fs:bx is parameter table address
 
     ! 将 gs:si 作为源地址，es:di 作为目的地址，拷贝 12 字节数据()
-	seg fs              ! 指令 seg 表示下一条语句的操作数在 fs 段中
+	seg fs              ! 指令 seg 表示下一条语句的操作数(bx)在 fs 段中
     ! 此处表示将 fs:bx 指向的内存地址中的数据(
     ! 软驱参数表所在的内存地址，由 BIOS 设置的)作为 gs:si 的值
 	lgs	si,(bx)			! gs:si is source
@@ -126,48 +130,63 @@ go:	mov	ax,cs	        ! 此时 cs = 0x9000(0)
 	movw
 
 	mov	di,dx           ! es:di 指向新的软驱参数表
-	movb	4(di),*18	! patch sector count，修改偏移 4 字节(0x9000:0xfef8)处的最大扇区数
+    ! 并修改偏移 4 字节(0x9000:0xfef8)处表示的最大扇区数(改为 18)
+	movb	4(di),*18	! patch sector count
 
+    ! 使得 0x1E 中断(内存 0x78 处)指向新软驱参数表地址(0x9000:0xfef4)处
 	seg fs
-	mov	(bx),di
+	mov	(bx),di         ! (bx)指向0x78处，di = 0xfef4
 	seg fs
-	mov	2(bx),es
+	mov	2(bx),es        ! 2(bx)指向0x80处，es = 0x9000
 
-	pop	ax
+	pop	ax              ! 此时 ax = 0x9000, sp = 0xfef4
 	mov	fs,ax
-	mov	gs,ax
+	mov	gs,ax           ! fs = gs = 0x9000
 	
-	xor	ah,ah			! reset FDC 
-	xor	dl,dl
-	int 	0x13	
+	xor	ah,ah			! reset FDC  ! 复位软盘控制器，使其采用新参数
+	xor	dl,dl           ! ah = 0, dl = 0(第一个软驱)
+
+! 利用 BIOS 的 0x13 号中断
+	int 	0x13	    ! 调用 0x13 中断
 
 ! load the setup-sectors directly after the bootblock.
 ! Note that 'es' is already set up.
-
+! 将 setup 模块的代码(共 4 个扇区)加载到 bootsect 代码块后面(0x90200 处)。
+! 注意，此时已经设置 es = 0x9000
+! BIOS 0x13 中断的参数说明：
+! ah = 0x02 --> 功能号:读磁盘扇区到内存;   al = 需要读取的扇区数
+! ch = 磁道(柱面)号的低 8 位;   cl = 开始扇区(位 0-5)，磁道号高 2 位(位 6-7)
+! dh = 磁头号;                  dl = 驱动器号(如果是硬盘则位 7 要置位[1])
+! es:bx --> 指向数据缓冲区(0x90200); 如果出错则 CF 标志置位，ah 中是出错码
 load_setup:
 	xor	dx, dx			! drive 0, head 0
 	mov	cx,#0x0002		! sector 2, track 0
-	mov	bx,#0x0200		! address = 512, in INITSEG
+	mov	bx,#0x0200		! address = 512, in INITSEG(0x9000)
+    ! ax = 0x0204; ah = 0x02(功能号), al = 0x04(读4个扇区)
 	mov	ax,#0x0200+SETUPLEN	! service 2, nr of sectors
 	int	0x13			! read it
+    ! 如果没出错(进位标志位 CF != 1)，则直接跳到 ok_load_setup 处继续执行
 	jnc	ok_load_setup		! ok - continue
 
-	push	ax			! dump error code
-	call	print_nl
-	mov	bp, sp
-	call	print_hex
-	pop	ax	
+    ! 如果出错，则显示出错信息
+	push	ax			! dump error code ! 出错码(ah 中存储)入栈，此时 sp = 0xfef4 + 2
+	call	print_nl    ! 打印换行符
+	mov	bp, sp          ! print_hex 将会打印  ss:bp 指向的地址中的数值
+	call	print_hex   ! 以十六进制的形式打印错误码
+	pop	ax	            ! ss:sp = 0x9fef4 栈指针指向软驱参数表
 	
-	xor	dl, dl			! reset FDC
-	xor	ah, ah
+	xor	dl, dl			! reset FDC ! 复位磁盘控制器(驱动器号)，并重试
+	xor	ah, ah          ! 清除错误码
 	int	0x13
-	j	load_setup
+	j	load_setup      ! 跳回到 load_setup 进行重试: j 表示 jmp
 
+! 若执行到此处表示已经将 setup 模块加载到内存 0x90200 处
 ok_load_setup:
 
 ! Get disk drive parameters, specifically nr of sectors/track
 
 	xor	dl,dl
+    ! 利用 BIOS 0x13 中断的 8 号功能来获取磁盘驱动器的参数。实际是获取每个磁道的扇区数，并保存在 sectors(该代码中的 sectors 位置) 处
 	mov	ah,#0x08		! AH=8 is get drive parameters
 	int	0x13
 	xor	ch,ch
@@ -363,35 +382,45 @@ no_reg:
 	loop	print_loop
 	ret
 
+! 调用 BIOS 0x10 号中断，以电传方式(什么是电传方式?)显示回车换行
 print_nl:
 	mov	ax, #0xe0d	! CR
 	int	0x10
 	mov	al, #0xa	! LF
-	int 	0x10
+	int 0x10
 	ret
 
 !/*
 ! *	print_hex is for debugging purposes, and prints the word
 ! *	pointed to by ss:bp in hexadecmial.
+! * print_hex 主要用于调试，将会以十六进制的方式打印 ss:bp 指向的字符
 !*/
-
+! 调用 BIOS 0x10 号中断，以电传方式和 4 个十六进制数显示 ss:bp 指向的字
 print_hex:
-	mov	cx, #4		! 4 hex digits
-	mov	dx, (bp)	! load word into dx
+	mov	cx, #4		! 4 hex digits          ! 要显示 4 个十六进制数字
+	mov	dx, (bp)	! load word into dx     ! 显示值(ss:bp 指向的数字)放入 dx
 print_digit:
-	rol	dx, #4		! rotate so that lowest 4 bits are used
-	mov	ah, #0xe	
+! 先显示高字节，因此需要把 dx 中值左旋 4 bit，此时高 4 bit 在 dx 的低 4 位中
+! dx 寄存器有 16 bit，每次循环只打印 4 bit(由高往低打印)
+	rol	dx, #4		! rotate so that lowest 4 bits are used -- 将高 4 bit 转为低 4 bit
+	mov	ah, #0xe	! 0x10 的中断功能号
 	mov	al, dl		! mask off so we have only next nibble
-	and	al, #0xf
+	and	al, #0xf    ! 将要显示的值放入 al 中，并只取低 4 bit(屏蔽 al 中高 4bit)
+
+    ! 将要显示的数字转换成 ascii 码值，即加上 0x30('0' 的 ascii 值):
+    ! '1' 用 ascii 表示为 0x31
 	add	al, #0x30	! convert to 0 based digit, '0'
-	cmp	al, #0x39	! check for overflow
-	jbe	good_digit
-	add	al, #0x41 - 0x30 - 0xa 	! 'A' - '0' - 0xa
+    ! 若此时 al 超过 0x39，即表示需要用 'A' - 'F' 来显示(再+7)
+	cmp	al, #0x39	! check for overflow    'A' - 'F'
+	jbe	good_digit  ! 如果 <= 0x39，则直接显示
+
+    ! 如果 > 0x39 则要再 +7 比如 0x40 表示数字 10，显示时对应的 ascii 为 0x41(十进制 65)
+	add	al, #0x41 - 0x30 - 0xa 	! 'A' - '0' - 0xa = 0x7
 
 good_digit:
 	int	0x10
-	loop	print_digit
-	ret
+	loop	print_digit     ! cx--, 若 cx > 0 则显示下一个值
+	ret                     ! 返回到函数调用处
 
 
 !/*
