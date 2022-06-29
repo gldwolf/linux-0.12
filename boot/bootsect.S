@@ -184,20 +184,36 @@ load_setup:
 ok_load_setup:
 
 ! Get disk drive parameters, specifically nr of sectors/track
-
-	xor	dl,dl
-    ! 利用 BIOS 0x13 中断的 8 号功能来获取磁盘驱动器的参数。实际是获取每个磁道的扇区数，并保存在 sectors(该代码中的 sectors 位置) 处
-	mov	ah,#0x08		! AH=8 is get drive parameters
-	int	0x13
-	xor	ch,ch
+! 利用 BIOS 0x13 中断的 8 号功能来获取磁盘驱动器的参数。实际是获取每个磁道的扇区数，并保存在 sectors(该代码中的 sectors 位置) 处
+! 获取磁盘驱动器参数的中断调用格式和返回信息如下：
+! 调用格式：ah = 0x08   dl = 驱动器号
+! 返回信息：如果出错，则 CF 置位，且 ah = 错误码
+! ah = 0, al = 0        bl = 驱动器类型(AT/PS2)
+! ch = 最大磁道号的低 8 位      cl = 每磁道最大扇区数(位 0-5)，最大磁道号高 2 位(位 6-7)
+! dh = 最大磁头数   dl = 驱动器数量
+! es:di -> 软驱参数表(0x9fef4)
+	xor	dl,dl           ! 驱动器号(0)
+	mov	ah,#0x08		! AH=8 is get drive parameters(功能号 8 --> 获取驱动器参数)
+	int	0x13            ! 调用 0x13 号中断读取驱动器参数(返回信息已写入各个寄存器)
+	xor	ch,ch           ! 将 ch 复位，这样使用 cx 时只有低 8 位有效
 	seg cs
-	mov	sectors,cx
+    ! 由于上面 ch 已经置位(0)，而对于软盘而言，最大磁道数不会超过 256(2^8)，所以，cl 中的位 6-7 为 0，因此，cx 中的数据即每磁道的扇区数
+	mov	sectors,cx      ! 将每磁道的扇区数保存到 sectors 处
 	mov	ax,#INITSEG
-	mov	es,ax
+	mov	es,ax           ! 因为上面获取磁盘参数表时中断修改了 es 的值，重新改回 0x9000
 
 ! Print some inane message
+! 下面代码利用 BIOS 0x10 中断的 0x03 功能和 0x13 中断来显示信息 "'Loading'+回车换行" 共 9 个字符
+! BIOS 0x10 中断说明：
+! 功能号: ah = 0x03, 读取光标所在位置
+! 输入: bh = 页号
+! 返回: ch = 扫描开始线; cl = 扫描结束线; dh = 行号(0x00 顶端); dl = 列号(0x00 最左边)
+! 功能号: ah = 0x13, 显示字符串
+! 输入: al = 放置光标的方式及规定属性。0x01 -- 表示使用 bl 中的属性值，光标停在字符串结尾处。
+! bh = 显示页面号, bl = 字符属性; dh = 行号; dl = 列号。cx = 显示的字符串字符数。
+! es:bp 此寄存器对指向要显示的字符串起始位置处
 
-	mov	ah,#0x03		! read cursor pos
+	mov	ah,#0x03		! read cursor pos ! 读取光标所在位置
 	xor	bh,bh
 	int	0x10
 	
@@ -436,6 +452,7 @@ kill_motor:
 	pop dx
 	ret
 
+! 每磁道的扇区数
 sectors:
 	.word 0
 
